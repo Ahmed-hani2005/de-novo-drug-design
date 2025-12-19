@@ -3,19 +3,24 @@
 import { useState } from "react";
 import { UserButton, useUser, RedirectToSignIn } from "@clerk/nextjs";
 import { 
-  Dna, Zap, Activity, Microscope, User, FileText, 
-  CheckCircle2, AlertTriangle, Database, ArrowRight, Search, 
-  ShieldCheck, Box, Printer, ChevronLeft, Heart, Stethoscope
+  Dna, Zap, Activity, Microscope, User, FileText, CheckCircle2, 
+  AlertTriangle, Database, Printer, ChevronLeft, Heart, Brain, 
+  Stethoscope, Flame, Pill, Box, Search, ShieldCheck 
 } from "lucide-react";
-// Fix: Removed duplicate 'Radar' import
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend 
 } from 'recharts';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
-// --- UI Components ---
+// --- Utility Components ---
+function cn(...inputs: any[]) {
+  return twMerge(clsx(inputs));
+}
+
 const GlassCard = ({ children, className = "" }: any) => (
-  <div className={`bg-white/90 backdrop-blur-xl border border-white/40 rounded-2xl shadow-xl transition-all duration-300 ${className}`}>
+  <div className={cn("bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl transition-all duration-300", className)}>
     {children}
   </div>
 );
@@ -26,29 +31,52 @@ const Badge = ({ children, variant = "neutral" }: any) => {
     success: "bg-emerald-100 text-emerald-700 border border-emerald-200",
     warning: "bg-amber-100 text-amber-700 border border-amber-200",
     danger: "bg-rose-100 text-rose-700 border border-rose-200",
+    purple: "bg-purple-100 text-purple-700 border border-purple-200"
   };
-  return <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${colors[variant]}`}>{children}</span>;
+  return <span className={cn("px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide", colors[variant])}>{children}</span>;
 };
 
-export default function ExpertDashboard() {
+// --- Scientific Visualization Components ---
+
+// 1. Toxicity Heatmap (مصفوفة السمية)
+const ToxicityMatrix = ({ drug }: any) => {
+  const risks = [
+    { label: "Heart (hERG)", level: drug.hERGRisk },
+    { label: "Liver (Tox)", level: drug.liverToxRisk },
+    { label: "CYP3A4", level: drug.cypInhibition.includes("Inhibitor") ? "Inhibitor" : "Clean" },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-3 mt-4">
+      {risks.map((r, i) => (
+        <div key={i} className={cn(
+            "p-3 rounded-lg border text-center transition-all",
+            r.level.includes("High") || r.level.includes("Inhibitor") ? "bg-rose-50 border-rose-200" : 
+            r.level.includes("Moderate") ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
+        )}>
+          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">{r.label}</div>
+          <div className={cn("font-black text-xs", 
+             r.level.includes("High") ? "text-rose-600" : r.level.includes("Moderate") ? "text-amber-600" : "text-emerald-600"
+          )}>{r.level}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default function NeoTargetUltimate() {
   const { isLoaded, isSignedIn, user } = useUser();
   const [activeTab, setActiveTab] = useState("setup");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [selectedDrug, setSelectedDrug] = useState<any>(null);
 
-  // New Expanded Patient Inputs
+  // Clinical Inputs
   const [pdbId, setPdbId] = useState("1M17");
   const [patientData, setPatientData] = useState({
-    name: "", // اسم المريض
-    age: "55", 
-    gender: "Male", 
-    weight: "75", 
-    chronicCondition: "None", 
-    liver: "Normal", 
-    kidney: "Normal", 
-    mutation: "EGFR T790M", 
-    category: "Oncology"
+    name: "", age: "55", gender: "Male", weight: "75",
+    tumorType: "Lung Cancer", stage: "Stage II", 
+    chronicCondition: "None", previousTreatment: "None",
+    liver: "Normal", kidney: "Normal", mutation: "EGFR T790M"
   });
 
   const runAnalysis = async () => {
@@ -57,398 +85,357 @@ export default function ExpertDashboard() {
     try {
       const res = await fetch("/api/pipeline", {
         method: "POST",
-        body: JSON.stringify({ pdbId, projectName: `Tx-${patientData.mutation}`, patientData })
+        body: JSON.stringify({ pdbId, projectName: `Neo-${patientData.mutation}`, patientData })
       });
+      
+      if (!res.ok) throw new Error("API Failed");
+
       const data = await res.json();
       if (data.success) {
         setResults(data);
         setSelectedDrug(data.molecules[0]);
         setActiveTab("results");
       }
-    } catch(e) { alert("Analysis failed."); }
+    } catch(e) { 
+      console.error(e);
+      alert("Analysis failed. Check console."); 
+    }
     finally { setLoading(false); }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (!isLoaded) return <div className="h-screen flex items-center justify-center bg-slate-50"><Dna className="animate-spin text-emerald-600 w-12 h-12" /></div>;
   if (!isSignedIn) return <RedirectToSignIn />;
 
-  // Data for Charts
+  // Radar Chart Data Preparation
   const radarData = selectedDrug ? [
-    { subject: 'Affinity', A: Math.abs(selectedDrug.bindingAffinity) * 8, fullMark: 100 },
     { subject: 'Efficacy', A: selectedDrug.efficacy, fullMark: 100 },
-    { subject: 'Safety', A: selectedDrug.toxicityRisk.includes("Safe") ? 95 : 30, fullMark: 100 },
+    { subject: 'Affinity', A: Math.min(Math.abs(selectedDrug.bindingAffinity) * 8, 100), fullMark: 100 },
+    { subject: 'Safety', A: selectedDrug.hERGRisk === "Low" ? 95 : 40, fullMark: 100 },
+    { subject: 'Drug-Like', A: selectedDrug.qed * 100, fullMark: 100 },
     { subject: 'Bioavail.', A: selectedDrug.absorption, fullMark: 100 },
-    { subject: 'Clearance', A: selectedDrug.clearance * 5, fullMark: 100 },
-  ] : [];
-
-  const admetData = selectedDrug ? [
-    { name: 'Absorption', value: selectedDrug.absorption, fill: '#10b981' },
-    { name: 'TPSA', value: selectedDrug.tpsa, fill: '#3b82f6' },
-    { name: 'Clearance', value: selectedDrug.clearance * 5, fill: '#f59e0b' },
   ] : [];
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
       
-      {/* --- PRINTABLE CLINICAL REPORT --- */}
-      <div className="hidden print:block p-10 bg-white text-black">
-        <div className="flex justify-between items-end border-b-4 border-emerald-700 pb-4 mb-8">
+      {/* --- RESEARCH REPORT TEMPLATE (Hidden unless printing) --- */}
+      <div className="hidden print:block p-10 bg-white text-black h-screen">
+        <div className="flex justify-between items-end border-b-4 border-slate-900 pb-4 mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-1">BioPharma Nexus</h1>
-            <p className="text-sm font-semibold text-slate-600 uppercase tracking-widest">Precision Medicine Report</p>
+             <h1 className="text-4xl font-black mb-1">NeoTarget AI Report</h1>
+             <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Precision Oncology & De Novo Design</p>
           </div>
           <div className="text-right">
-            <p className="font-bold text-lg">Dr. {user.fullName}</p>
-            <p className="text-sm text-slate-500">{new Date().toDateString()}</p>
+             <p className="font-bold text-lg">Dr. {user.fullName}</p>
+             <p className="text-sm text-slate-500">{new Date().toLocaleDateString()}</p>
           </div>
         </div>
 
-        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8 grid grid-cols-2 gap-8">
-          <div>
-            <h3 className="text-emerald-700 font-bold border-b border-emerald-200 pb-2 mb-3 uppercase text-xs tracking-wider">Patient Demographics</h3>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Name:</span> {patientData.name}</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Age / Sex:</span> {patientData.age} / {patientData.gender}</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Weight:</span> {patientData.weight} kg</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Condition:</span> {patientData.chronicCondition}</p>
-          </div>
-          <div>
-            <h3 className="text-emerald-700 font-bold border-b border-emerald-200 pb-2 mb-3 uppercase text-xs tracking-wider">Clinical Context</h3>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Diagnosis:</span> {patientData.category}</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Mutation:</span> {patientData.mutation}</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Target:</span> {results?.protein || pdbId}</p>
-            <p className="mb-1"><span className="font-bold text-slate-500 w-24 inline-block">Organ Risk:</span> Liver ({patientData.liver}), Kidney ({patientData.kidney})</p>
-          </div>
+        <div className="grid grid-cols-2 gap-8 mb-8">
+           <div className="border p-4 rounded-lg bg-slate-50">
+              <h3 className="font-bold border-b pb-2 mb-2 flex items-center gap-2"><User size={16}/> Clinical Profile</h3>
+              <p className="text-sm"><strong>Patient:</strong> {patientData.name} ({patientData.age}y, {patientData.gender})</p>
+              <p className="text-sm"><strong>Diagnosis:</strong> {patientData.tumorType} ({patientData.stage})</p>
+              <p className="text-sm"><strong>Comorbidities:</strong> {patientData.chronicCondition}</p>
+              <p className="text-sm"><strong>Organ Function:</strong> Liver: {patientData.liver}, Kidney: {patientData.kidney}</p>
+           </div>
+           <div className="border p-4 rounded-lg bg-slate-50">
+              <h3 className="font-bold border-b pb-2 mb-2 flex items-center gap-2"><Dna size={16}/> Molecular Target</h3>
+              <p className="text-sm"><strong>Target Protein:</strong> {results?.molecules[0]?.targetName || pdbId}</p>
+              <p className="text-sm"><strong>PDB ID:</strong> {pdbId}</p>
+              <p className="text-sm"><strong>Mutation:</strong> {patientData.mutation}</p>
+              <p className="text-sm"><strong>Design Strategy:</strong> Multi-Objective Pareto Optimization</p>
+           </div>
         </div>
 
         {selectedDrug && (
-          <div className="mb-10">
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><CheckCircle2 className="text-emerald-600"/> AI Recommended Therapeutic</h2>
-            <div className="border-2 border-emerald-600 rounded-xl p-6 bg-white">
-              <div className="grid grid-cols-2 gap-10">
-                <div>
-                  <p className="text-xs text-slate-400 uppercase font-bold mb-1">Candidate ID</p>
-                  <p className="text-2xl font-mono font-bold text-slate-900 mb-4">{selectedDrug.id}</p>
-                  
-                  <p className="text-xs text-slate-400 uppercase font-bold mb-1">Chemical Structure (SMILES)</p>
-                  <div className="font-mono text-xs break-all bg-slate-100 p-3 rounded border border-slate-200 text-slate-600 leading-relaxed">
-                    {selectedDrug.smiles}
-                  </div>
-                </div>
-                <div className="space-y-3 pt-2">
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-slate-600">Predicted Efficacy</span> 
-                    <span className="font-bold text-emerald-700 text-lg">{selectedDrug.efficacy}%</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-slate-600">Binding Affinity</span> 
-                    <span className="font-bold text-slate-900">{selectedDrug.bindingAffinity} kcal/mol</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-slate-600">Safety Assessment</span> 
-                    <span className={`font-bold ${selectedDrug.toxicityRisk.includes("Safe") ? "text-emerald-600" : "text-rose-600"}`}>{selectedDrug.toxicityRisk}</span>
-                  </div>
-                  {patientData.chronicCondition !== "None" && (
-                    <div className="flex justify-between border-b border-slate-100 pb-2 bg-yellow-50 px-2 rounded">
-                      <span className="text-yellow-800 font-bold">Comorbidity Check</span> 
-                      <span className="font-bold text-slate-900">{patientData.chronicCondition} Optimized</span>
-                    </div>
-                  )}
-                </div>
+           <div className="border-2 border-slate-900 rounded-xl p-6 mb-8">
+              <div className="flex justify-between items-start mb-4">
+                 <h2 className="text-2xl font-bold">Top Candidate: {selectedDrug.id}</h2>
+                 <Badge variant="purple">Pareto Score: {selectedDrug.efficacy}</Badge>
               </div>
-            </div>
-          </div>
+              
+              <div className="bg-slate-100 p-3 rounded font-mono text-xs break-all mb-6 border">
+                 {selectedDrug.smiles}
+              </div>
+
+              <div className="grid grid-cols-3 gap-6">
+                 <div>
+                    <h4 className="font-bold border-b mb-2 text-sm">Pharmacodynamics</h4>
+                    <p className="text-sm">Affinity: <strong>{selectedDrug.bindingAffinity} kcal/mol</strong></p>
+                    <p className="text-sm">QED Score: <strong>{selectedDrug.qed}</strong></p>
+                 </div>
+                 <div>
+                    <h4 className="font-bold border-b mb-2 text-sm">ADMET & Safety</h4>
+                    <p className="text-sm">hERG Risk: <strong>{selectedDrug.hERGRisk}</strong></p>
+                    <p className="text-sm">Liver Tox: <strong>{selectedDrug.liverToxRisk}</strong></p>
+                 </div>
+                 <div>
+                    <h4 className="font-bold border-b mb-2 text-sm">Physicochemical</h4>
+                    <p className="text-sm">MW: {selectedDrug.molecularWeight} Da</p>
+                    <p className="text-sm">LogP: {selectedDrug.logP}</p>
+                 </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-slate-50 border rounded-lg">
+                 <h4 className="font-bold text-sm mb-2">AI Reasoning (XAI)</h4>
+                 <p className="italic text-sm text-slate-700">"{selectedDrug.aiReasoning}"</p>
+              </div>
+           </div>
         )}
-
-        <div className="mt-16 pt-6 border-t-2 border-slate-200 flex justify-between items-center text-xs text-slate-400">
-          <p>Generated by BioPharma Nexus AI • Developed by Dr. Ahmed Hani Mohamed</p>
-          <p>CONFIDENTIAL • CLINICAL RESEARCH USE ONLY</p>
-        </div>
+        <div className="text-center text-xs text-slate-400 mt-10">Generated by NeoTarget AI System - Confidential Research Document</div>
       </div>
-      {/* --- END PRINTABLE REPORT --- */}
 
-
-      {/* Navbar */}
+      {/* --- APP UI --- */}
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b px-6 py-3 flex justify-between items-center shadow-sm print:hidden">
         <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-br from-emerald-600 to-cyan-600 p-2 rounded-lg text-white shadow-lg">
-            <Dna className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-slate-900">BioPharma Nexus <span className="text-emerald-600">Expert</span></h1>
-          </div>
+           <div className="bg-slate-900 text-white p-2 rounded-lg shadow-lg"><Brain size={24}/></div>
+           <h1 className="text-xl font-black text-slate-900 tracking-tight">NeoTarget <span className="text-emerald-600">AI</span></h1>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">Dr. {user.firstName}</span>
-          <UserButton afterSignOutUrl="/" />
-        </div>
+        <UserButton afterSignOutUrl="/" />
       </nav>
 
       <main className="flex-grow max-w-7xl mx-auto w-full p-6 space-y-8 print:hidden">
-        
         {/* Stepper */}
         <div className="flex justify-center mb-8">
           <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 inline-flex gap-2">
             {[
-              { id: "setup", label: "1. Patient Data" },
-              { id: "results", label: "2. Expert Analysis" },
-              { id: "visualization", label: "3. 3D Model" }
+              { id: "setup", label: "1. Clinical Input" },
+              { id: "results", label: "2. Analysis Dashboard" },
+              { id: "visualization", label: "3. 3D Structure" }
             ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                disabled={tab.id !== "setup" && !results}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === tab.id ? "bg-emerald-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                {tab.label}
-              </button>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} disabled={tab.id !== "setup" && !results} className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === tab.id ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"}`}>{tab.label}</button>
             ))}
           </div>
         </div>
 
-        {/* --- SETUP TAB --- */}
+        {/* --- TAB 1: SETUP --- */}
         {activeTab === "setup" && (
           <div className="grid md:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4">
             <div className="md:col-span-8 space-y-6">
-              <GlassCard className="p-8">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Clinical Admission</h2>
-                    <p className="text-slate-500">Enter patient vitals and comorbidities for safety screening.</p>
+               <GlassCard className="p-8">
+                  <div className="flex justify-between items-center mb-6">
+                     <h2 className="text-2xl font-bold text-slate-800">New Research Case</h2>
+                     <Stethoscope className="text-emerald-600"/>
                   </div>
-                  <ShieldCheck className="text-emerald-500 w-10 h-10 opacity-80" />
-                </div>
+                  
+                  {/* Demographics */}
+                  <div className="mb-6 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                     <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex gap-2 items-center"><User size={14}/> Patient Demographics</h3>
+                     <div className="grid grid-cols-2 gap-4 mb-3">
+                        <input type="text" placeholder="Full Name / ID" value={patientData.name} onChange={e=>setPatientData({...patientData, name: e.target.value})} className="p-3 border border-slate-200 rounded-xl w-full focus:ring-2 focus:ring-slate-900 outline-none transition-all"/>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full bg-white" onChange={e=>setPatientData({...patientData, gender: e.target.value})}><option>Male</option><option>Female</option></select>
+                     </div>
+                     <div className="grid grid-cols-3 gap-4">
+                        <input type="number" placeholder="Age" value={patientData.age} onChange={e=>setPatientData({...patientData, age: e.target.value})} className="p-3 border border-slate-200 rounded-xl w-full"/>
+                        <input type="number" placeholder="Weight (kg)" value={patientData.weight} onChange={e=>setPatientData({...patientData, weight: e.target.value})} className="p-3 border border-slate-200 rounded-xl w-full"/>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full bg-white" onChange={e=>setPatientData({...patientData, chronicCondition: e.target.value})}>
+                            <option value="None">No Comorbidities</option>
+                            <option value="Heart Failure">Heart Failure (NYHA III)</option>
+                            <option value="Hypertension">Hypertension</option>
+                            <option value="Diabetes T2">Diabetes Type 2</option>
+                            <option value="Liver Cirrhosis">Liver Cirrhosis</option>
+                        </select>
+                     </div>
+                  </div>
 
-                {/* Patient Vitals */}
-                <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 mb-6">
-                  <h3 className="text-xs font-bold text-emerald-600 uppercase mb-4 flex items-center gap-2"><User size={14}/> Patient Identity</h3>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">Patient Name</label>
-                      <input type="text" value={patientData.name} onChange={e => setPatientData({...patientData, name: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Full Name" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">Chronic Conditions</label>
-                      <select className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" onChange={e => setPatientData({...patientData, chronicCondition: e.target.value})}>
-                        <option value="None">None (Healthy)</option>
-                        <option value="Heart Disease">Heart Disease (Cardiac)</option>
-                        <option value="Hypertension">Hypertension (High BP)</option>
-                        <option value="Diabetes">Diabetes Type 2</option>
-                        <option value="Asthma">Asthma / COPD</option>
-                      </select>
-                    </div>
+                  {/* Oncology */}
+                  <div className="mb-6 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                     <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex gap-2 items-center"><Dna size={14}/> Oncology Profile</h3>
+                     <div className="grid grid-cols-2 gap-4 mb-3">
+                        <select className="p-3 border border-slate-200 rounded-xl w-full bg-white" onChange={e=>setPatientData({...patientData, tumorType: e.target.value})}>
+                            <option value="Lung Cancer">Lung Cancer (NSCLC)</option>
+                            <option value="Breast Cancer">Breast Cancer</option>
+                            <option value="Glioblastoma">Glioblastoma (Brain)</option>
+                            <option value="Pancreatic Cancer">Pancreatic Cancer</option>
+                        </select>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full bg-white" onChange={e=>setPatientData({...patientData, stage: e.target.value})}>
+                            <option value="Stage I">Stage I</option>
+                            <option value="Stage II">Stage II</option>
+                            <option value="Stage III">Stage III</option>
+                            <option value="Stage IV">Stage IV (Metastatic)</option>
+                        </select>
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <input type="text" placeholder="Mutation (e.g. EGFR T790M)" value={patientData.mutation} onChange={e=>setPatientData({...patientData, mutation: e.target.value})} className="p-3 border border-slate-200 rounded-xl w-full"/>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full bg-white" onChange={e=>setPatientData({...patientData, previousTreatment: e.target.value})}>
+                             <option value="None">Treatment Naive</option>
+                             <option value="Chemotherapy">Chemotherapy</option>
+                             <option value="Immunotherapy">Immunotherapy</option>
+                             <option value="TKI">TKI (Resistance)</option>
+                        </select>
+                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">Age</label>
-                      <input type="number" value={patientData.age} onChange={e => setPatientData({...patientData, age: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">Weight (kg)</label>
-                      <input type="number" value={patientData.weight} onChange={e => setPatientData({...patientData, weight: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">Gender</label>
-                      <select className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" onChange={e => setPatientData({...patientData, gender: e.target.value})}><option>Male</option><option>Female</option></select>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Disease & Target */}
-                <div className="grid md:grid-cols-2 gap-6 mb-6">
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-slate-400 uppercase">Target PDB ID</label>
-                    <div className="flex gap-2">
-                      <input type="text" value={pdbId} onChange={e => setPdbId(e.target.value.toUpperCase())} className="flex-1 p-3 bg-white border border-slate-200 rounded-xl font-mono text-lg font-bold tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none" />
-                      <button className="bg-slate-100 px-4 rounded-xl hover:bg-slate-200"><Search size={20} className="text-slate-500"/></button>
-                    </div>
+                  {/* Organ Function */}
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                     <div>
+                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Liver Function</label>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full mt-1 bg-white" onChange={e=>setPatientData({...patientData, liver: e.target.value})}><option value="Normal">Normal</option><option value="Impaired">Impaired (Child-Pugh B/C)</option></select>
+                     </div>
+                     <div>
+                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Kidney Function</label>
+                        <select className="p-3 border border-slate-200 rounded-xl w-full mt-1 bg-white" onChange={e=>setPatientData({...patientData, kidney: e.target.value})}>
+                          <option value="Normal">Normal (GFR &gt; 90)</option>
+                          <option value="Impaired">Impaired (GFR &lt; 60)</option>
+                        </select>
+                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-slate-400 uppercase">Disease Category</label>
-                    <select className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" onChange={e => setPatientData({...patientData, category: e.target.value})}>
-                      <option value="Oncology">Oncology</option>
-                      <option value="Cardiology">Cardiology</option>
-                      <option value="Neurology">Neurology</option>
-                      <option value="Infectious">Infectious Diseases</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="border-t border-slate-100 my-6 pt-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><Activity size={16}/> Organ Function (Safety Constraints)</h3>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-2">Liver (Metabolism)</label>
-                      <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" onChange={e => setPatientData({...patientData, liver: e.target.value})}>
-                        <option value="Normal">Normal Function</option>
-                        <option value="Impaired">Impaired (Avoid Hepatotoxic)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-2">Kidney (Clearance)</label>
-                      <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" onChange={e => setPatientData({...patientData, kidney: e.target.value})}>
-                        <option value="Normal">Normal Function</option>
-                        <option value="Impaired">Impaired (Avoid High MW)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={runAnalysis} disabled={loading}
-                  className="w-full py-4 mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-xl transition-all flex items-center justify-center gap-3 text-lg"
-                >
-                  {loading ? <Zap className="animate-spin text-yellow-400" /> : <Zap className="text-yellow-400" fill="currentColor" />}
-                  {loading ? "Running Expert System..." : "Run Clinical Screening"}
-                </button>
-              </GlassCard>
+                  <button onClick={runAnalysis} disabled={loading} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex justify-center items-center gap-3 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                      {loading ? <Zap className="animate-spin text-emerald-400"/> : <Brain className="text-emerald-400"/>}
+                      {loading ? "Running Multi-Objective Optimization..." : "Initialize Generative Pipeline"}
+                  </button>
+               </GlassCard>
             </div>
-
+            
             <div className="md:col-span-4 space-y-6">
-              <GlassCard className="p-6 bg-gradient-to-br from-emerald-700 to-teal-900 text-white border-none">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Stethoscope/> Expert Logic</h3>
-                <p className="text-emerald-100 text-sm leading-relaxed mb-4">
-                  This system integrates geriatric and comorbidity rulesets. 
-                </p>
-                <div className="bg-white/10 p-3 rounded-lg text-xs space-y-2">
-                  <div className="flex items-center gap-2"><Heart size={14} className="text-rose-400"/> <span>Cardio-Safety Checks</span></div>
-                  <div className="flex items-center gap-2"><Activity size={14} className="text-blue-400"/> <span>Renal Clearance Adjustment</span></div>
-                  <div className="flex items-center gap-2"><ShieldCheck size={14} className="text-yellow-400"/> <span>Age Stratification</span></div>
-                </div>
-              </GlassCard>
+                <GlassCard className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white border-none">
+                   <h3 className="text-xl font-bold mb-4">Scientific Validation</h3>
+                   <div className="space-y-4 text-sm text-slate-300 leading-relaxed">
+                      <p>NeoTarget implements a <strong>Multi-Objective Pareto Optimization</strong> algorithm to balance conflicting drug properties.</p>
+                      <div className="space-y-3 mt-4">
+                         <div className="flex gap-3 items-start"><CheckCircle2 className="text-emerald-400 shrink-0" size={18}/> <div><strong>Lipinski & Veber Rules:</strong> Strict physicochemical filtering.</div></div>
+                         <div className="flex gap-3 items-start"><CheckCircle2 className="text-emerald-400 shrink-0" size={18}/> <div><strong>hERG Prediction:</strong> Cardiotoxicity alerts for heart patients.</div></div>
+                         <div className="flex gap-3 items-start"><CheckCircle2 className="text-emerald-400 shrink-0" size={18}/> <div><strong>De Novo Design:</strong> Generative scaffolds for resistant mutations.</div></div>
+                      </div>
+                   </div>
+                </GlassCard>
             </div>
           </div>
         )}
 
-        {/* --- RESULTS TAB --- */}
+        {/* --- TAB 2: RESULTS DASHBOARD --- */}
         {activeTab === "results" && results && (
           <div className="grid md:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4">
-            
-            {/* Left List */}
-            <div className="md:col-span-7 space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-slate-800">Ranked Candidates</h2>
-                <button onClick={handlePrint} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors shadow-lg">
-                  <Printer size={14}/> Print Clinical Report
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                {results.molecules.map((m: any, i: number) => (
-                  <div 
-                    key={i} 
-                    onClick={() => setSelectedDrug(m)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
-                      selectedDrug?.id === m.id 
-                      ? "bg-white border-emerald-500 shadow-md ring-1 ring-emerald-500" 
-                      : "bg-white border-slate-100 hover:border-emerald-300"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${i===0 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                        #{i+1}
-                      </div>
-                      <div>
-                        <div className="font-mono text-xs text-slate-500">{m.id}</div>
-                        <div className="font-bold text-slate-800 flex gap-2 items-center text-sm">
-                          Efficacy: {m.efficacy}%
-                        </div>
-                      </div>
-                    </div>
-                    <Badge variant={m.toxicityRisk.includes("Safe") ? "success" : "danger"}>{m.toxicityRisk}</Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Analysis */}
-            <div className="md:col-span-5">
-              {selectedDrug && (
-                <GlassCard className="p-6 sticky top-24 bg-white/90">
-                  <div className="mb-4">
-                    <h3 className="text-lg font-bold text-slate-800">Drug Passport</h3>
-                    <p className="text-xs text-slate-500 font-mono break-all">{selectedDrug.smiles}</p>
-                  </div>
-
-                  <div className="h-48 w-full -ml-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                        <PolarGrid stroke="#e2e8f0" />
-                        <PolarAngleAxis dataKey="subject" tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                        <Radar name="Stats" dataKey="A" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
-                        <Tooltip contentStyle={{borderRadius: '8px', fontSize: '12px'}}/>
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="mt-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">ADMET Profile</h4>
-                    <div className="h-32 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={admetData} layout="vertical">
-                          <XAxis type="number" hide />
-                          <YAxis dataKey="name" type="category" width={70} tick={{fontSize: 10}} />
-                          <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '8px'}} />
-                          <Bar dataKey="value" barSize={15} radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <button onClick={() => setActiveTab("visualization")} className="w-full mt-4 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20">
-                    <Box size={18} /> Visualize in 3D
-                  </button>
-                </GlassCard>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* --- TAB 3: VISUALIZATION (With Back Button) --- */}
-        {activeTab === "visualization" && (
-          <div className="animate-in zoom-in-95 duration-500 h-[calc(100vh-200px)] flex flex-col gap-4">
-            <button onClick={() => setActiveTab("results")} className="self-start flex items-center gap-2 text-slate-500 hover:text-emerald-600 font-bold transition-colors">
-              <ChevronLeft size={20} /> Back to Results
-            </button>
-
-            <GlassCard className="h-full overflow-hidden flex flex-col border border-white/60">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white/50">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-100 p-2 rounded text-emerald-700 font-bold font-mono">{pdbId}</div>
-                  <h3 className="font-bold text-slate-800">Molecular Docking Simulation</h3>
+             {/* Left: Candidates List */}
+             <div className="md:col-span-5 space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                   <h2 className="text-xl font-bold text-slate-800">Top Candidates</h2>
+                   <div className="text-xs text-slate-500 font-bold">{results.molecules.length} generated</div>
                 </div>
-                <Badge variant="success">Interactive</Badge>
-              </div>
-              <div className="flex-grow bg-slate-900 relative">
-                <iframe 
-                  src={`https://3dmol.csb.pitt.edu/viewer.html?pdb=${pdbId}&style=cartoon:color=spectrum&surface=opacity:0.7;color:white&select=hetatm&style=stick:color=orange&labelres=backgroundOpacity:0.8;fontSize:12`}
-                  className="w-full h-full border-none"
-                  title="3D Molecular Viewer"
-                ></iframe>
-              </div>
-            </GlassCard>
+                <div className="space-y-3 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                  {results.molecules.map((m: any, i: number) => (
+                     <div key={i} onClick={()=>setSelectedDrug(m)} className={cn(
+                        "p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-3 group hover:shadow-md",
+                        selectedDrug?.id===m.id ? "bg-white border-emerald-500 ring-1 ring-emerald-500 shadow-md" : "bg-white border-slate-100 hover:border-emerald-300"
+                     )}>
+                        <div className="flex justify-between items-start">
+                           <div className="flex items-center gap-3">
+                              <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs", m.source.includes("De Novo") ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700")}>
+                                {m.source.includes("De Novo") ? "AI" : "DB"}
+                              </div>
+                              <div>
+                                 <div className="font-mono text-[10px] text-slate-400">{m.id}</div>
+                                 <div className="font-bold text-sm text-slate-800">Score: {m.efficacy}</div>
+                              </div>
+                           </div>
+                           <Badge variant={m.efficacy > 80 ? "success" : "warning"}>{m.efficacy > 80 ? "Elite" : "Good"}</Badge>
+                        </div>
+                        
+                        <div className="flex justify-between items-center border-t pt-2">
+                           <div className="text-xs text-slate-500">Affinity: <span className="font-bold text-slate-800">{m.bindingAffinity}</span></div>
+                           <div className="text-xs text-slate-500">LogP: <span className="font-bold text-slate-800">{m.logP}</span></div>
+                           <div className="text-xs text-slate-500">MW: <span className="font-bold text-slate-800">{m.molecularWeight}</span></div>
+                        </div>
+                     </div>
+                  ))}
+                </div>
+             </div>
+
+             {/* Right: Scientific Analysis Board */}
+             <div className="md:col-span-7">
+                {selectedDrug && (
+                   <GlassCard className="p-0 sticky top-24 overflow-hidden">
+                      {/* Header */}
+                      <div className="p-6 border-b bg-slate-50 flex justify-between items-center">
+                         <div>
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900"><Microscope className="text-purple-600"/> Molecule Analysis</h3>
+                            <p className="text-xs font-mono text-slate-500 mt-1 max-w-md truncate">{selectedDrug.smiles}</p>
+                         </div>
+                         <button onClick={handlePrint} className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-lg">
+                            <Printer size={16}/> Export Report
+                         </button>
+                      </div>
+
+                      <div className="p-6 grid md:grid-cols-2 gap-8">
+                         {/* Column 1: Charts */}
+                         <div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase mb-4 text-center">Multi-Objective Profile</h4>
+                            <div className="h-56 w-full relative">
+                               <ResponsiveContainer width="100%" height="100%">
+                                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                                     <PolarGrid stroke="#e2e8f0"/>
+                                     <PolarAngleAxis dataKey="subject" tick={{fill:'#64748b', fontSize:10, fontWeight:'bold'}}/>
+                                     <PolarRadiusAxis angle={30} domain={[0,100]} tick={false} axisLine={false}/>
+                                     <Radar name="Candidate" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.5}/>
+                                     <Tooltip contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}/>
+                                  </RadarChart>
+                               </ResponsiveContainer>
+                            </div>
+                            
+                            <h4 className="text-xs font-bold text-slate-400 uppercase mt-6 mb-2">Safety Matrix</h4>
+                            <ToxicityMatrix drug={selectedDrug} />
+                         </div>
+
+                         {/* Column 2: XAI & Actions */}
+                         <div className="flex flex-col justify-between">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                               <h4 className="text-xs font-bold text-slate-500 uppercase flex gap-2 items-center mb-3"><Brain size={14}/> Explainable AI (XAI)</h4>
+                               <p className="text-sm text-slate-700 italic leading-relaxed">
+                                  "{selectedDrug.aiReasoning}"
+                               </p>
+                               <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-2 text-xs">
+                                  <div>Target: <span className="font-bold">{results.protein || pdbId}</span></div>
+                                  <div>Source: <span className="font-bold text-purple-600">{selectedDrug.source}</span></div>
+                               </div>
+                            </div>
+
+                            <button onClick={()=>setActiveTab("visualization")} className="w-full mt-6 py-4 bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center gap-2 hover:bg-emerald-700 shadow-lg hover:shadow-emerald-200 transition-all">
+                               <Box size={18}/> View 3D Structure
+                            </button>
+                         </div>
+                      </div>
+                   </GlassCard>
+                )}
+             </div>
           </div>
         )}
 
+        {/* --- TAB 3: VISUALIZATION --- */}
+        {activeTab === "visualization" && (
+           <div className="animate-in zoom-in-95 duration-500 h-[calc(100vh-200px)]">
+              <GlassCard className="h-full flex flex-col border-0 overflow-hidden shadow-2xl">
+                 <div className="p-4 border-b bg-slate-50 flex justify-between items-center z-10">
+                    <button onClick={()=>setActiveTab("results")} className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
+                        <ChevronLeft size={18}/> Back to Analysis
+                    </button>
+                    <div className="flex gap-3">
+                       <Badge variant="success">WebGL Active</Badge>
+                       <Badge variant="neutral">Protein: {pdbId}</Badge>
+                    </div>
+                 </div>
+                 <div className="flex-grow bg-slate-900 relative">
+                     {/* 3D Mol Viewer Iframe */}
+                    <iframe 
+                      src={`https://3dmol.csb.pitt.edu/viewer.html?pdb=${pdbId}&style=cartoon:color=spectrum&surface=opacity:0.7;color:white&select=hetatm&style=stick:color=orange`} 
+                      className="w-full h-full border-none"
+                      title="3D Structure Viewer"
+                    ></iframe>
+                    
+                    {/* Overlay Legend */}
+                    <div className="absolute bottom-6 left-6 bg-black/70 backdrop-blur text-white p-4 rounded-xl text-xs space-y-2 pointer-events-none">
+                        <div className="font-bold border-b border-white/20 pb-1 mb-2">Visualization Key</div>
+                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500 block"></span> Ligand / Drug</div>
+                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500 block"></span> Protein Surface</div>
+                    </div>
+                 </div>
+              </GlassCard>
+           </div>
+        )}
       </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 mt-auto py-8 print:hidden">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-slate-500">© 2025 BioPharma Nexus. Precision Medicine Platform.</div>
-          <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
-            <ShieldCheck size={16} className="text-emerald-600" />
-            <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Developed by <span className="text-slate-900">Dr. Ahmed Hani Mohamed</span></span>
-          </div>
-        </div>
-      </footer>
-
     </div>
   );
 }

@@ -17,24 +17,29 @@ model User {
 
 model PatientProfile {
   id               String   @id @default(uuid())
-  name             String   @default("Anonymous") // اسم المريض
+  name             String   @default("Anonymous")
   age              Int
   gender           String
   weight           String
-  chronicCondition String   @default("None") // الأمراض المزمنة
+  
+  // الحقول الطبية الجديدة (تأكد إنها موجودة)
+  tumorType        String   @default("Lung Cancer")
+  cancerStage      String   @default("Stage II")
+  chronicCondition String   @default("None")
+  previousTreatment String?
+  
   liverFunction    String   @default("Normal")
   kidneyFunction   String   @default("Normal")
   geneticMutation  String?
+  
   projects         Project[]
 }
 
 model Project {
   id          String   @id @default(uuid())
   name        String
-  description String?
   pdbId       String
   targetName  String?
-  status      String   @default("Screening")
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   patientId   String?
@@ -46,18 +51,31 @@ model Project {
 model Molecule {
   id              String   @id @default(uuid())
   smiles          String
+  source          String   @default("De Novo AI") 
+  
+  // الخصائص
   molecularWeight Float
   logP            Float
   hbd             Int
   hba             Int
   tpsa            Float
+  rotatableBonds  Int      @default(5)
+  
+  // حقول الأمان (Safety)
+  absorption      Float    @default(0)
+  clearance       Float    @default(0)
+  hERGRisk        String   @default("Low")
+  cypInhibition   String   @default("None")
+  liverToxRisk    String   @default("Low") // مهم جداً
+  
+  // حقول الذكاء الاصطناعي
   qed             Float
   bindingAffinity Float
-  toxicityRisk    String
-  absorption      Float    @default(0) // New for ADMET
-  clearance       Float    @default(0) // New for ADMET
+  efficacy        Float
+  confidenceScore Float    @default(0.0)
+  aiReasoning     String   @default("Analysis pending...") 
+
   projectId       String
   project         Project  @relation(fields: [projectId], references: [id])
-  isSelected      Boolean  @default(false)
   createdAt       DateTime @default(now())
 }
